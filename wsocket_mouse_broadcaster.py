@@ -4,6 +4,7 @@ import requests
 import threading
 import websocket # iiwari client
 import websockets
+
 import pymysql
 
 from common_funcs import cred_login, get_site, calculate_distance
@@ -24,6 +25,15 @@ def wsocket_client_listener(session, site_id):
                                 cookie=cookies)
 
     wss.run_forever()
+
+async def listen_mouse():
+    uri = "ws://localhost:8780"
+
+    async with websockets.connect(uri) as websocket:
+        await websocket.send(f"cam3")
+        while True:
+            msg = await websocket.recv()
+            on_message(None, msg)
 
 
 def on_message(ws, message):
@@ -73,6 +83,7 @@ async def broadcast():
                 distance = calculate_distance(point1, point2)
 
                 if distance <= THRESHOLD:
+                    print("sending")
 
                     client_socket = clients[target]["wsocket"]
                     await client_socket.send(json.dumps(trigger_data))
@@ -83,6 +94,7 @@ async def broadcast():
                     set_signal_default_thread = threading.Timer(seconds_to_wait, set_signal_default, args=(target,))
                     set_signal_default_thread.start()
 
+        await asyncio.sleep(0.2)
 
 def set_signal_default(target_id):
     global clients
@@ -118,16 +130,11 @@ def grab_triggers():
 async def main():
     grab_triggers()
 
-    session = requests.Session()
-    cred_login(session, "Dan@501entertainment.co.uk", "kREBu5rRdarDqs2Z")
-    site_id = get_site(session)
-
-    wsocket_client_listener_thread = threading.Thread(target=wsocket_client_listener, args=(session, site_id,), daemon=True)
-    wsocket_client_listener_thread.start()
+    asyncio.create_task(listen_mouse())
 
     asyncio.create_task(broadcast())
 
-    print("[CREATING SERVER]")
+    print("[CREATING BROADCAST SERVER]")
     async with websockets.serve(handler, "localhost", 8765):
         await asyncio.Future()  # run forever
 
