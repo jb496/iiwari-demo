@@ -32,6 +32,8 @@ class Client:
                 _, frame = cap.read()
                 self.buffer.append(frame)
 
+                cv2.imshow("cam", frame)
+
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
 
@@ -40,8 +42,6 @@ class Client:
         except Exception as err:
             print(err)
 
-        finally:
-            self.save_to_buffer()
 
     def save_to_buffer_thread(self):
         buffer_append_thread = threading.Thread(target=self.save_to_buffer, daemon=True)
@@ -53,6 +53,7 @@ class Client:
 
             while True:
                 data = await websocket.recv()
+                data = json.loads(data)
 
                 vid_duration = data["duration"]
                 trigger_mid = int(vid_duration/2)
@@ -64,6 +65,10 @@ class Client:
         filename = f"{data['ts']}.mp4"
         delay_frames, duration_frames = data["delay"] * self.fps, data["duration"] * self.fps
 
+        if len(self.buffer) < delay_frames + duration_frames:
+            print("[ ERROR ] Wait for buffer to complete")
+            return
+
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         out = cv2.VideoWriter(filename, fourcc, 30.0, (640,480))
 
@@ -71,14 +76,16 @@ class Client:
         vid_buffer = deque(maxlen=duration_frames)
 
         for i in range(duration_frames + delay_frames):
-            frame.buffer_copy.pop()
+            frame = buffer_copy.pop()
 
-            if i >= delay:
+            if i >= delay_frames:
                 vid_buffer.append(frame)
 
         for i in range(duration_frames):
             frame = vid_buffer.pop()
             out.write(frame)
+
+        print("[ FINISH WRITING VIDEO ]")
 
         wait_clean_save_thread = threading.Timer(5, self.upload_file, args=[filename])
         wait_clean_save_thread.start()
@@ -86,6 +93,8 @@ class Client:
     def upload_file(self, filename):
         self.ftp.storbinary(f"STOR {filename}", open(filename, 'rb'))
         self.ftp.quit()
+
+        print("[ FINISH UPLOADING VIDEO ]")
 
 
 async def main():

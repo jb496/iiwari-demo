@@ -45,6 +45,15 @@ class WebSocketClient:
         listen_thread = threading.Thread(target=self.start_listening, daemon=True)
         listen_thread.start()
 
+    async def listen_mouse(self):
+        uri = "ws://localhost:8780"
+
+        async with websockets.connect(uri) as websocket:
+            await websocket.send(f"WEBSOCKET LISTENER")
+            while True:
+                msg = await websocket.recv()
+                self.on_message(None, msg)
+
 
 class Broadcaster:
     def __init__(self, websocket_client):
@@ -95,6 +104,8 @@ class Broadcaster:
 
     async def broadcast(self):
         while True:
+            await asyncio.sleep(0.2) # blocks other task without sleep
+
             tags = self.wsocket_client.tags
 
             if len(tags) == 0:
@@ -121,7 +132,9 @@ class Broadcaster:
                     distance = calculate_distance(point1, point2)
 
                     if distance <= self.THRESHOLD:
-                        trigger_data["ts"] = tags["ts"]
+                        print(f"[ SENDING SIGNAL ]")
+
+                        trigger_data["ts"] = tags[tag_id]["ts"]
 
                         client_socket = self.clients[target]["wsocket"]
                         await client_socket.send(json.dumps(trigger_data))
@@ -129,12 +142,12 @@ class Broadcaster:
                         self.clients[target]["send_signal"] = True
                         seconds_to_wait = trigger_data["delay"] + trigger_data["duration"]
 
-                        set_signal_default_thread = threading.Timer(seconds_to_wait, self.set_signal_default, args=(target,))
+                        set_signal_default_thread = threading.Timer(seconds_to_wait, self.set_signal_default, args=[target,])
                         set_signal_default_thread.start()
 
-            await asyncio.sleep(0) # blocks other task without sleep
 
     def set_signal_default(self, target_id):
+        print("setting default")
         if target_id in self.clients:
             self.clients[target_id]["send_signal"] = False
 
@@ -142,6 +155,7 @@ class Broadcaster:
 async def main():
     websocket_client = WebSocketClient()
     websocket_client.start_listening_thread()
+    # asyncio.create_task(websocket_client.listen_mouse())
 
     broadcaster = Broadcaster(websocket_client)
     broadcaster.grab_trigger_data()

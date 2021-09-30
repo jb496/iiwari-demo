@@ -17,7 +17,7 @@ def mouse_tracker(event, x, y, flags, params):
         "x":x,
         "y":y,
         "z":1,
-        "ts":None
+        "ts":"Jan 01"
     })
 
 
@@ -66,7 +66,7 @@ def grab_triggers():
 
 
 async def handler(websocket, path):
-    print("[NEW CONNECTED] Broadcaster connected")
+    print("[NEW CONNECTION]")
     while True:
         if pos is not None:
             await websocket.send(pos)
