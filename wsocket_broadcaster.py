@@ -83,6 +83,8 @@ async def broadcast():
                     set_signal_default_thread = threading.Timer(seconds_to_wait, set_signal_default, args=(target,))
                     set_signal_default_thread.start()
 
+        await asyncio.sleep(0) # blocks other task without sleep
+
 
 def set_signal_default(target_id):
     global clients
