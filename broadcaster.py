@@ -135,6 +135,7 @@ class Broadcaster:
                         print(f"[ SENDING SIGNAL ]")
 
                         trigger_data["ts"] = tags[tag_id]["ts"]
+                        trigger_data["node_id"] = tag_id
 
                         client_socket = self.clients[target]["wsocket"]
                         await client_socket.send(json.dumps(trigger_data))
