@@ -1,3 +1,4 @@
+import os
 import cv2
 import json
 import base64
@@ -13,12 +14,13 @@ class Client:
 	def __init__(self):
 		self.ftp_host_port = 1026
 		self.ftp_host_address = '192.168.100.49'
-		self.host_file_dir = "Desktop/iiwari/ftp"
+		self.host_file_dir = "/vids"
 
 		self.ftp = FTP("")
 		self.ftp.connect(self.ftp_host_address, self.ftp_host_port)
-		self.ftp.login()
-		self.ftp.cwd(self.host_file_dir)
+		self.ftp.login(user="test", passwd="testpw")
+		self.ftp.cwd('vids')
+		# self.ftp.dir()  # List the files in the user's home directory.
 
 		self.cam_id = "cam1"
 		self.wsocket_uri = "ws://192.168.100.49:8765"
@@ -32,7 +34,10 @@ class Client:
 		self.buffer_complete = False
 		self.buffer = deque(maxlen=self.max_buffer_frames) # 20 secs at 30fps
 
-		self.stream_listeners = {}
+		self.websocket_stream = "192.168.100.49"
+		self.websocket_stream_port = 9001
+
+		self.server = None
 
 	def save_to_buffer(self):
 		try:
@@ -56,7 +61,6 @@ class Client:
 
 		except Exception as err:
 			print(err)
-
 
 	def save_to_buffer_thread(self):
 		buffer_append_thread = threading.Thread(target=self.save_to_buffer, daemon=True)
@@ -84,14 +88,30 @@ class Client:
 					get_buffer_frames_thread = threading.Timer(trigger_mid, self.get_buffer_frames, args=(trigger_data,))
 					get_buffer_frames_thread.start()
 
-				elif header == "STREAM-VIDEO":
-					data = json.dumps({
-						"id":"STREAM-VIDEO-RESPONSE",
-						"base64":self.get_current_frame()
-					})
+				elif header == "START-STREAM-SERVER":
+					print("hr")
+					await self.start_streaming_server()
 
+
+	async def start_streaming_server(self):
+		# need it like this to retrieve an await Websocket Server
+		self.server = await websockets.serve(self.handler, self.websocket_stream, self.websocket_stream_port)
+
+	async def handler(self, websocket, path):
+		try:
+			async for msg in websocket:
+				data = json.loads(msg)
+				id = data["id"]
+
+				while True:
+					await asyncio.sleep(0)
+
+					data = json.dumps({ "base64":self.get_current_frame()})
 					await websocket.send(data)
 
+		except:
+			print("[ STREAMING CLIENT CLOSED CONNECTION ]")
+			self.server.close()
 
 	def get_current_frame(self):
 		dq = self.buffer.copy()
@@ -112,8 +132,9 @@ class Client:
 			print(f"[ ERROR ] Buffer is only {current_buffer_size} frame, need {self.max_buffer_frames} frames")
 			return
 
-		node_id, timestamp = data["node_id"], datetime.datetime.now()
-		filename = f"{node_id} {timestamp}.mp4"
+		c_time = datetime.datetime.now()
+		node_id, timestamp = data["node_id"], f"{c_time.day}-{c_time.month}-{c_time.year}-{c_time.minute}-{c_time.second}"
+		filename = f"{node_id}-{timestamp}.mp4"
 		delay_frames, duration_frames = data["tag_delay"] * self.fps, data["clip_duration"] * self.fps
 
 
@@ -135,14 +156,23 @@ class Client:
 
 		print("[ FINISH WRITING VIDEO ]")
 
-		# wait_clean_save_thread = threading.Timer(5, self.upload_file, args=[filename])
-		# wait_clean_save_thread.start()
+		wait_clean_save_thread = threading.Timer(5, self.upload_delete_file, args=[filename])
+		wait_clean_save_thread.start()
 
-	def upload_file(self, filename):
+	def upload_delete_file(self, filename):
 		self.ftp.storbinary(f"STOR {filename}", open(filename, 'rb'))
 		self.ftp.quit()
 
 		print("[ FINISH UPLOADING VIDEO ]")
+
+		# delete file
+		print("[ DELETING VIDEO LOCALLY ]")
+
+		CURRENT_PATH = os.path.abspath(os.path.dirname(__file__))
+		file = os.path.join(CURRENT_PATH, filename)
+		os.system(f"rm {file}")
+
+
 
 
 async def main():
