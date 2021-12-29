@@ -42,6 +42,8 @@ class Client:
 
 		self.server = None
 
+		self.invalid_chars = ["-", " ", ".", ":"]
+
 	def save_to_buffer(self):
 		try:
 			cap = cv2.VideoCapture(0)
@@ -53,7 +55,6 @@ class Client:
 				if not self.buffer_complete:
 					if len(self.buffer) == self.max_buffer_frames:
 						self.buffer_complete = True
-						print("[ READY ] Buffer full")
 
 				cv2.imshow("cam", frame)
 
@@ -71,7 +72,15 @@ class Client:
 
 	async def listen(self):
 		async with websockets.connect(self.wsocket_uri) as websocket:
-			data = {"id":self.cam_id, "address":self.local_address}
+			data = {"id":self.cam_id, "address":self.local_address, "buffer_full":False}
+			await websocket.send(json.dumps(data))
+
+			print(" [ FILLING BUFFER SIZE ... PLEASE WAIT ]")
+			while not self.buffer_complete:
+				pass
+
+			print(" [ READY. BUFFER SIZE FULL ]")
+			data["buffer_full"] = True
 			await websocket.send(json.dumps(data))
 
 			while True:
@@ -81,6 +90,7 @@ class Client:
 				header = msg["header"]
 
 				if header == "SAVE-VIDEO":
+					print("[ SAVING VIDEO MSG RECV ]")
 					trigger_data = msg["data"]
 					vid_duration = trigger_data["clip_duration"]
 
@@ -130,18 +140,14 @@ class Client:
 
 
 	def get_buffer_frames(self, data):
-		if not self.buffer_complete:
-			current_buffer_size = len(self.buffer)
-			print(f"[ ERROR ] Buffer is only {current_buffer_size} frame, need {self.max_buffer_frames} frames")
-			return
+		node_id = data["node_id"]
+		timestamp = "".join([ch if ch not in self.invalid_chars else "_" for ch in str(datetime.datetime.now())])
+		filename = f"{timestamp}_{node_id}.webm"
 
-		c_time = datetime.datetime.now()
-		node_id, timestamp = data["node_id"], f"{c_time.day}-{c_time.month}-{c_time.year}-{c_time.minute}-{c_time.second}"
-		filename = f"{node_id}-{timestamp}.mp4"
 		delay_frames, duration_frames = data["tag_delay"] * self.fps, data["clip_duration"] * self.fps
 
 
-		fourcc = cv2.VideoWriter_fourcc(*'mp4v') # mp4v or webm
+		fourcc = cv2.VideoWriter_fourcc(*'VP80') # mp4v or webm
 		out = cv2.VideoWriter(filename, fourcc, self.fps, self.frame_size)
 
 		buffer_copy = self.buffer.copy()

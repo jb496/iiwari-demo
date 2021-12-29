@@ -90,9 +90,8 @@ class Broadcaster:
 		self.port = 8765
 		self.current_frame = None
 
-		self.extra_seconds = 2 # extra seconds to move vids after client writes and uploads vid
 		self.VID_PATH = r"/vids" # vids created by client sent into this public folder
-		self.TARGET_PATH = r"/var/www/test/vids" # move vids into this admin folder
+		self.TARGET_PATH = r"/var/www/webApp/webApp/static/videos" # move vids into this admin folder
 		self.CURRENT_PATH = os.path.abspath(os.path.dirname(__file__))
 
 		self.db = None
@@ -153,7 +152,7 @@ class Broadcaster:
 
 				print(f"[ NEW CONNECTION ] {id} connected")
 
-				self.clients[id] = { "wsocket":websocket, "send_signal":False }
+				self.clients[id] = { "wsocket":websocket, "send_signal":False}
 
 				if id == 'DEV':
 					self.grab_trigger_data()
@@ -175,6 +174,7 @@ class Broadcaster:
 						self.add_cam_data(id, data["address"])
 					else:
 						self.update_cam_data(id, data["address"])
+						self.clients[id]["buffer_full"] = data["buffer_full"]
 
 		except Exception as e:
 			print(f"[ ERROR IN BROADCASTER HANDLER FUNCTION ] {e}")
@@ -230,38 +230,45 @@ class Broadcaster:
 
 					intercepted = check_intercept(trigger_data["trigger_pos"], trigger_data["trigger_thresh"], p1, p2)
 
-					if intercepted:
+					if intercepted and not self.clients[cam_name]["send_signal"] and self.clients[cam_name]["buffer_full"]:
 						trigger_data["node_id"] = tag_id # add tag id for refencing video
 
+						msg = json.dumps({
+							"header":"SAVE-VIDEO",
+							"data":trigger_data
+						})
+
 						client_socket = self.clients[cam_name]["wsocket"]
-						await client_socket.send(json.dumps({"header":"SAVE-VIDEO", "data":trigger_data}))
+						await client_socket.send(msg)
 
 						print(f"[ {cam_name} ] SETTING SEND SIGNAL TO TRUE")
 						self.clients[cam_name]["send_signal"] = True
 
-						seconds_to_wait = trigger_data["tag_delay"] + trigger_data["clip_duration"] + self.extra_seconds
-
-						set_signal_default_thread = threading.Timer(seconds_to_wait, self.set_signal_default, args=[cam_name,])
-						set_signal_default_thread.start()
-
-						print(threading.active_count())
+						wait_secs = trigger_data["tag_delay"] + trigger_data["clip_duration"]
+						reset_cam_state_thread = threading.Timer(wait_secs, self.transfer_file, args=[cam_name])
+						reset_cam_state_thread.start()
 
 
-	def set_signal_default(self, cam):
-		if cam in self.clients:
-			print(f"[ {cam} ] SETTING SEND SIGNAL TO FALSE")
-			self.clients[cam]["send_signal"] = False
+	def transfer_file(self, cam):
+		print("[ QUERYING VIDEO WRITE FINISHED ]")
 
-		self.transfer_file()
-
-	def transfer_file(self):
-		print("transfering files")
 		vid_path = os.path.join(self.CURRENT_PATH + self.VID_PATH)
-		for filename in os.listdir(vid_path):
-			file = os.path.join(vid_path, filename)
-			print(f"echo 5522 | sudo -S mv {file} {self.TARGET_PATH}")
-			os.system(f"echo 5522 | sudo -S mv {file} {self.TARGET_PATH}")
+		videos = os.listdir(vid_path)
 
+		if len(videos) != 0:
+			if cam in self.clients:
+				print(f"[ RESETTING SEND SIGNAL TO FALSE ] {cam}")
+				self.clients[cam]["send_signal"] = False
+
+			for filename in videos:
+				file = os.path.join(vid_path, filename)
+				# print(f"echo 5522 | sudo -S mv {file} {self.TARGET_PATH}") # one line cmd transfer file
+				os.system(f"echo 5522 | sudo -S mv {file} {self.TARGET_PATH}")
+
+		else:
+			print("[ ERROR ] NO FILES FOUND, QUERYING AGAIN IN 1s")
+			query_file_thread = threading.Timer(1, self.transfer_file, args=[cam])
+			query_file_thread.start()
 
 
 async def main():
