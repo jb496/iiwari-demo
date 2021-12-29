@@ -12,6 +12,8 @@ import threading
 import websocket # iiwari client
 import websockets
 
+import socket
+
 from collections import deque
 from modules.common_funcs import cred_login, get_site, check_intercept
 
@@ -84,7 +86,7 @@ class Broadcaster:
 		self.triggers = {}
 
 		self.wsocket_client = websocket_client
-		self.ip_address = "192.168.100.49"
+		self.ip_address = socket.gethostbyname(socket.gethostname())
 		self.port = 8765
 		self.current_frame = None
 
@@ -93,22 +95,37 @@ class Broadcaster:
 		self.TARGET_PATH = r"/var/www/test/vids" # move vids into this admin folder
 		self.CURRENT_PATH = os.path.abspath(os.path.dirname(__file__))
 
+		self.db = None
+		self.db_cursor = None
 
-	def grab_trigger_data(self):
-		parse_pos = lambda json_pos: [json_pos["x"], json_pos["y"]]
+		self.cam_data = None
+		self.cam_data_table = "cam_data"
 
-		mydb = pymysql.connect(db='example',
+	def initDB(self):
+		self.db = pymysql.connect(db='example',
 							   user='dev',
 							   passwd='',
 							   host='localhost',
 							   database='tags_db')
 
-		cursor = mydb.cursor()
+		self.db_cursor = self.db.cursor()
+
+		self.grab_cam_data()
+		self.grab_trigger_data()
+
+
+	def grab_cam_data(self):
+		self.db_cursor.execute(f"SELECT * FROM {self.cam_data_table}")
+		self.cam_data = self.db_cursor.fetchall()
+		print(self.cam_data)
+
+	def grab_trigger_data(self):
+		parse_pos = lambda json_pos: [json_pos["x"], json_pos["y"]]
 
 		table = "trigger_data"
-		cursor.execute(f"SELECT * FROM {table}")
+		self.db_cursor.execute(f"SELECT * FROM {table}")
 
-		trigger_data = cursor.fetchall()
+		trigger_data = self.db_cursor.fetchall()
 		print(f"List of triggers: {trigger_data}")
 
 		for data in trigger_data:
@@ -144,7 +161,6 @@ class Broadcaster:
 				elif id == "START-STREAM":
 					# check streaming cam is available and send stream command
 					cam_target = data["cam_name"]
-
 					if cam_target in self.clients:
 						print(f"sending stream command to {cam_target}")
 
@@ -152,12 +168,33 @@ class Broadcaster:
 						msg = json.dumps({"header":"START-STREAM-SERVER"})
 						await cam_target_ws.send(msg)
 
+				else:
+					# add/update db for camera local address
+					cam_ids = [cam_id for key, cam_id, address in self.cam_data]
+					if id not in cam_ids:
+						self.add_cam_data(id, data["address"])
+					else:
+						self.update_cam_data(id, data["address"])
+
 		except Exception as e:
 			print(f"[ ERROR IN BROADCASTER HANDLER FUNCTION ] {e}")
 
 		finally:
 			if id in self.clients:
 				del self.clients[id]
+
+	def add_cam_data(self, cam_id, address):
+		sql_cmd = "INSERT INTO {} (cam_name, cam_address) VALUES {};".format(self.cam_data_table, (cam_id, address))
+		self.db_cursor.execute(sql_cmd)
+		self.db.commit()
+
+	def update_cam_data(self, cam_name, address):
+		sql_cmd = "UPDATE {} SET cam_address='{}' WHERE cam_name='{}';".format(self.cam_data_table, address, cam_name)
+		print(sql_cmd)
+
+		self.db_cursor.execute(sql_cmd)
+		self.db.commit()
+
 
 	async def broadcast(self):
 		while True:
@@ -170,8 +207,8 @@ class Broadcaster:
 
 
 			# SEND ALL POINTS TO GUI FOR SHOWING TAG POSITIONS
-			if "GUI" in self.clients:
-				ws = self.clients["GUI"]["wsocket"]
+			if "DEV" in self.clients:
+				ws = self.clients["DEV"]["wsocket"]
 				data = json.dumps({id:{"x":point.x, "y":point.y} for id, point in tags.items()})
 				await ws.send(data)
 
@@ -207,6 +244,8 @@ class Broadcaster:
 						set_signal_default_thread = threading.Timer(seconds_to_wait, self.set_signal_default, args=[cam_name,])
 						set_signal_default_thread.start()
 
+						print(threading.active_count())
+
 
 	def set_signal_default(self, cam):
 		if cam in self.clients:
@@ -216,8 +255,10 @@ class Broadcaster:
 		self.transfer_file()
 
 	def transfer_file(self):
-		for filename in os.listdir(self.CURRENT_PATH + self.VID_PATH):
-			file = self.CURRENT_PATH + self.VID_PATH + "/" + filename
+		print("transfering files")
+		vid_path = os.path.join(self.CURRENT_PATH + self.VID_PATH)
+		for filename in os.listdir(vid_path):
+			file = os.path.join(vid_path, filename)
 			print(f"echo 5522 | sudo -S mv {file} {self.TARGET_PATH}")
 			os.system(f"echo 5522 | sudo -S mv {file} {self.TARGET_PATH}")
 
@@ -230,7 +271,7 @@ async def main():
 		# asyncio.create_task(websocket_client.listen_mouse())
 
 		broadcaster = Broadcaster(websocket_client)
-		broadcaster.grab_trigger_data()
+		broadcaster.initDB()
 		asyncio.create_task(broadcaster.broadcast()) #coroutine
 		await broadcaster.start_server()
 
