@@ -9,11 +9,13 @@ import threading
 import websockets
 from collections import deque
 
+from modules.common_funcs import get_hardware_id
+
 from ftplib import FTP
 
 class Client:
 	def __init__(self):
-		self.broadcaster_address = '192.168.100.53' # need a way to query this automatically
+		self.broadcaster_address = "immanuel.local"
 
 		self.ftp_host_port = 1026
 		self.ftp_host_address = self.broadcaster_address
@@ -24,7 +26,7 @@ class Client:
 		self.ftp.login(user="test", passwd="testpw")
 		self.ftp.cwd('vids')
 
-		self.cam_id = "cam1"
+		self.cam_id = get_hardware_id('Machine ID')
 		self.wsocket_uri = f"ws://{self.broadcaster_address}:8765"
 
 		self.frame_size = (640,480)

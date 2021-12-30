@@ -1,3 +1,4 @@
+import os
 import math
 import json
 import numpy as np
@@ -54,3 +55,9 @@ def check_intercept(circle_centrepoint, circle_r, p0, p1):
         return False
 
     return True
+
+
+def get_hardware_id(key):
+    cmd_res = os.popen(f"hostnamectl | grep '{key}'").read()
+    machine_key, id = cmd_res.strip().split(": ")
+    return id
