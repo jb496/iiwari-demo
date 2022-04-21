@@ -47,7 +47,7 @@ class RPiClient:
 		self.ftp.connect(BROADCASTER_MDNS_HOSTNAME, FTP_PORT)
 		self.ftp.login(user=FTP_USER, passwd=FTP_PASSWORD)
 
-		self.curr_path = os.path.abspath(os.path.dirname(__file__))
+		self.curr_path = os.path.abspath(os.getcwd())
 
 	def start_cam(self):
 		""" Fill buffer with frames, no error handling for cam not found """
@@ -92,6 +92,7 @@ class RPiClient:
 			frame = vid_buffer.pop()
 			video_writer.write(frame)
 
+		# wait 5 seconds for video_writer to finish writing video
 		send_delete_thread = threading.Timer(5, self.send_delete_video, args=[filename])
 		send_delete_thread.start()
 
@@ -103,10 +104,11 @@ class RPiClient:
 		curr_timestamp = datetime.datetime.now()
 		date = curr_timestamp.strftime("%x").replace("/","-")
 		time = curr_timestamp.strftime("%X").replace(":","-")
-		return f"{date}-{time}-{tag_id}.{self.extension}"
+		filename = f"{date}-{time}-{tag_id}.{self.extension}".replace(" ", "-")
+		return filename
 
 	def send_delete_video(self, filename):
-		# send video
+		""" Send video via ftp and delete video locally """
 		self.ftp.storbinary(f"STOR {filename}", open(filename, "rb"))
 		print(f"Finishing uploading {filename} to server")
 
