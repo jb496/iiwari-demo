@@ -52,7 +52,7 @@ cd iiwari-demo
 pip3 install -r requirements.txt
 ```
 
-Iiwari-dmeo requires Python3.x to run the scripts successfully.
+Iiwari-demo requires Python3.x to run the scripts successfully.  
 Instructions for Python3 [installation](https://docs.python-guide.org/starting/install3/linux/).
 
 ## RUN DEMO WITH MOUSE SIMULATOR
@@ -61,7 +61,7 @@ Instructions for Python3 [installation](https://docs.python-guide.org/starting/i
 cd iiwari-demo
 python3 mouse_sim.py
 ```
-Any trigger points will be drawn to a window *Room Layout*.
+Any trigger points will be drawn to a window *Room Layout*.  
 Move mouse to window *Room Layout* to start tracking mouse position relative to window.
 
 2. Set **USE_MOUSE_SIM** to true. In a new terminal, run broadcaster.
@@ -69,7 +69,7 @@ Move mouse to window *Room Layout* to start tracking mouse position relative to 
 cd iiwari-demo
 python3 broadcaster.py
 ```
-Connect to websocket server in mouse_sim.py
+Connect to websocket server in mouse_sim.  
 Start its own websocket server for handling RPI clients and sending commands.
 
 3. In a raspberry pi terminal, run rpi.
@@ -77,8 +77,8 @@ Start its own websocket server for handling RPI clients and sending commands.
 cd iiwari-demo
 python3 rpi.py
 ```
-Connect to websocket server in broadcaster.py
-Capture videos and save it to a buffer
+Connect to websocket server in broadcaster.  
+Capture videos and save it to a buffer.
 
 
 ## Hardware requirements
