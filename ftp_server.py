@@ -1,6 +1,9 @@
+import threading
+
 from pyftpdlib.authorizers import DummyAuthorizer
 from pyftpdlib.handlers import FTPHandler
 from pyftpdlib.servers import FTPServer
+
 
 FTP_PORT = 1026
 FTP_USER = "test"
@@ -16,9 +19,9 @@ class FTPWrapper:
 		self.authorizer.add_user(FTP_USER, FTP_PASSWORD, FTP_VIDEO_PATH, perm="elradfmw")
 
 		self.handler = FTPHandler
-		self.handler.authorizer = authorizer
+		self.handler.authorizer = self.authorizer
 
-		server = FTPServer((FTP_HOSTNAME, FTP_PORT), self.handler)
+		self.server = FTPServer((FTP_HOSTNAME, FTP_PORT), self.handler)
 
 		serve_thread = threading.Thread(target=self.serve_forever, daemon=True)
 		serve_thread.start()

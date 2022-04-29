@@ -46,6 +46,8 @@ class Broadcaster:
 		self.db_handler = DBHandler()
 		self.triggers = self.db_handler.get_trigger_data()
 
+		self.ftp_server = FTPWrapper()
+
 	async def start_broadcasting_server(self):
 		""" Boilerplate to create simple broadcasting server """
 		print("Starting Broadcasting Server")
