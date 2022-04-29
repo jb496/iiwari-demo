@@ -110,7 +110,7 @@ class RPiClient:
 	def send_delete_video(self, filename):
 		""" Send video via ftp and delete video locally """
 		self.ftp.storbinary(f"STOR {filename}", open(filename, "rb"))
-		print(f"Finishing uploading {filename} to server")
+		print(f"Uploading {filename} to server")
 
 		file_path = os.path.join(self.curr_path, filename)
 		os.system(f"rm {file_path}")
